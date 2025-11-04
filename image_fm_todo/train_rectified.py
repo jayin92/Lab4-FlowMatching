@@ -1,5 +1,5 @@
 """
-Training Script for Rectified Flow (Task 3)
+Training Script for Rectified Flow (Task 3 - Optional/Bonus)
 
 Trains a rectified flow model on synthetic (x_0, z_1) pairs generated from a pretrained
 Flow Matching model. The model learns straighter trajectories, enabling faster sampling.
@@ -13,7 +13,6 @@ Usage:
 
 import argparse
 import json
-import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -21,18 +20,12 @@ import matplotlib
 import matplotlib.pyplot as plt
 import torch
 from dotmap import DotMap
+from fm import FlowMatching, FMScheduler
+from network import UNet
 from pytorch_lightning import seed_everything
+from reflow_dataset import ReflowDataset, get_reflow_data_iterator
+from dataset import tensor_to_pil_image
 from tqdm import tqdm
-
-sys.path.append('.')
-from image_common.dataset import tensor_to_pil_image
-from image_common.fm import FlowMatching, FMScheduler
-from image_common.network import UNet
-
-from task3_rectified_flow.reflow_dataset import (
-    ReflowDataset,
-    get_reflow_data_iterator,
-)
 
 matplotlib.use("Agg")
 
@@ -160,19 +153,20 @@ def main(args):
                 label = None
 
             ######## TODO ########
+            # DO NOT change the code outside this part.
             # Implement rectified flow training:
-            # For reflow, we train on synthetic pairs (Z_0^(k-1), Z_1^(k-1)) from the 
-            # previous rectified flow, but use the SAME CFM loss as the base flow.
+            # The key difference from base FM training is that we train on synthetic pairs (x_0, z_1)
+            # instead of real data. The loss computation is identical to base FM.
             #
-            # The loss is: E[||v_θ(x_t, t) - (x_1 - x_0)||²]
-            # where x_t = (1-t)*x_0 + t*x_1
-            #
-            # Here: x_0 (from dataset) = Z_0^(k-1), z_1 (from dataset) = Z_1^(k-1)
+            # Hint: Use fm.get_loss() with x_0 as the prior and z_1 as the target.
+            # The CFM loss is: E[||v_t(ψ_t(x_0|z_1); θ) - (z_1 - (1 - σ_min)x_0)||²]
 
+            # Compute loss
             if args.use_cfg:
                 loss = fm.get_loss(z_1, class_label=label, x0=x_0)
             else:
                 loss = fm.get_loss(z_1, x0=x_0)
+
             ######################
 
             pbar.set_description(f"Loss: {loss.item():.4f}")

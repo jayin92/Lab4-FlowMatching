@@ -1,9 +1,5 @@
-from typing import List, Optional
-
-import numpy as np
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from .module import DownSample, ResBlock, Swish, TimeEmbedding, UpSample
 from torch.nn import init
 
@@ -23,6 +19,7 @@ class UNet(nn.Module):
         if use_cfg:
             assert num_classes is not None
             cdim = tdim
+            # num_classes+1 because 0 is reserved for the null (unconditional) token
             self.class_embedding = nn.Embedding(num_classes+1, cdim)
 
         self.head = nn.Conv2d(3, ch, kernel_size=3, stride=1, padding=1)
@@ -79,17 +76,24 @@ class UNet(nn.Module):
             if self.training:
                 assert not torch.any(class_label == 0) # 0 for null.
                 
-                ######## TODO ########
-                # DO NOT change the code outside this part.
-                # Assignment 2. Implement random null conditioning in CFG training.
-                raise NotImplementedError("TODO")
-                #######################
+                # Create a mask for dropping labels.
+                # We drop with probability self.cfg_dropout.
+                # So, we *keep* with probability (1 - self.cfg_dropout).
+                mask = torch.rand_like(class_label, dtype=torch.float) > self.cfg_dropout
+                
+                # Create a null label tensor (all zeros)
+                null_label = torch.tensor(0, device=class_label.device, dtype=class_label.dtype)
+                
+                # Use the mask to select between the original label and the null label
+                # If mask is True (1), keep class_label.
+                # If mask is False (0), use null_label (0).
+                class_label = torch.where(mask, class_label, null_label)            
             
-            ######## TODO ########
-            # DO NOT change the code outside this part.
-            # Assignment 2. Implement class conditioning
-            raise NotImplementedError("TODO")
-            #######################
+            # Get the embedding for the class label (which could be the null token)
+            class_emb = self.class_embedding(class_label) # Shape: [B, cdim]
+            
+            # Add the class embedding to the time embedding
+            temb = temb + class_emb # Shape: [B, tdim]
 
         # Downsampling
         h = self.head(x)

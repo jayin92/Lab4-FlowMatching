@@ -5,7 +5,7 @@ Evaluates rectified flow models with different numbers of sampling steps and
 compares against base Flow Matching model.
 
 Usage:
-    python image_fm_todo/evaluate_rectified.py \
+    python task3_rectified_flow/evaluate_rectified.py \
         --base_ckpt_path results/cfg_fm-XXX/last.ckpt \
         --rectified_ckpt_path results/rectified_fm_1-XXX/last.ckpt \
         --save_dir results/evaluation \

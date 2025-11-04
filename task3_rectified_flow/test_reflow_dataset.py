@@ -2,7 +2,7 @@
 Test script to verify reflow dataset was generated correctly.
 
 Usage:
-    python image_fm_todo/test_reflow_dataset.py --reflow_data_path data/afhq_reflow --use_cfg
+    python task3_rectified_flow/test_reflow_dataset.py --reflow_data_path data/afhq_reflow --use_cfg
 """
 
 import argparse
@@ -180,7 +180,7 @@ def test_reflow_dataset(reflow_data_path, use_cfg=True):
     print("✓ All tests passed! Reflow dataset is ready for training.")
     print("="*80)
     print(f"\nYou can now train rectified flow with:")
-    print(f"python image_fm_todo/train_rectified.py \\")
+    print(f"python task3_rectified_flow/train_rectified.py \\")
     print(f"  --reflow_data_path {reflow_data_path} \\")
     if use_cfg:
         print(f"  --use_cfg \\")
