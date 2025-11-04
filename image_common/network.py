@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from module import DownSample, ResBlock, Swish, TimeEmbedding, UpSample
+from .module import DownSample, ResBlock, Swish, TimeEmbedding, UpSample
 from torch.nn import init
 
 
