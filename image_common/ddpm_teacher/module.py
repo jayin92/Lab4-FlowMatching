@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import init
+from diffusers.models.normalization import AdaGroupNorm
 
 
 class Swish(nn.Module):
@@ -81,50 +82,18 @@ class AttnBlock(nn.Module):
         return x + h
 
 
-class AdaGN(nn.Module):
-    """Adaptive Group Normalization for condition injection"""
-    def __init__(self, num_channels, num_groups=32, tdim=None):
-        super().__init__()
-        self.num_channels = num_channels
-        self.num_groups = num_groups
-        self.group_norm = nn.GroupNorm(num_groups, num_channels)
-
-        # Project condition embedding to scale and shift parameters
-        if tdim is not None:
-            self.adagn_proj = nn.Sequential(
-                Swish(),
-                nn.Linear(tdim, num_channels * 2),  # *2 for scale and shift
-            )
-        else:
-            self.adagn_proj = None
-
-    def forward(self, x, temb=None):
-        # Apply group normalization
-        h = self.group_norm(x)
-
-        # Apply adaptive modulation if condition is provided
-        if self.adagn_proj is not None and temb is not None:
-            # Project embedding to scale and shift
-            params = self.adagn_proj(temb)[:, :, None, None]
-            scale, shift = torch.chunk(params, 2, dim=1)
-            # Adaptive modulation: scale * normalized + shift
-            h = h * (1 + scale) + shift
-
-        return h
-
-
 class ResBlock(nn.Module):
     def __init__(self, in_ch, out_ch, tdim, dropout, attn=False):
         super().__init__()
-        # First block with AdaGN for condition injection
-        self.adagn1 = AdaGN(in_ch, num_groups=32, tdim=tdim)
+        # First block with AdaGroupNorm for condition injection
+        self.adagn1 = AdaGroupNorm(tdim, in_ch, num_groups=32)
         self.conv1 = nn.Sequential(
             Swish(),
             nn.Conv2d(in_ch, out_ch, 3, stride=1, padding=1),
         )
 
-        # Second block with AdaGN for condition injection
-        self.adagn2 = AdaGN(out_ch, num_groups=32, tdim=tdim)
+        # Second block with AdaGroupNorm for condition injection
+        self.adagn2 = AdaGroupNorm(tdim, out_ch, num_groups=32)
         self.conv2 = nn.Sequential(
             Swish(),
             nn.Dropout(dropout),
@@ -153,11 +122,11 @@ class ResBlock(nn.Module):
                 break
 
     def forward(self, x, temb):
-        # First block with AdaGN
+        # First block with AdaGroupNorm
         h = self.adagn1(x, temb)
         h = self.conv1(h)
 
-        # Second block with AdaGN
+        # Second block with AdaGroupNorm
         h = self.adagn2(h, temb)
         h = self.conv2(h)
 

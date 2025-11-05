@@ -20,11 +20,15 @@ class UNet(nn.Module):
         # classifier-free guidance
         self.use_cfg = use_cfg
         self.cfg_dropout = cfg_dropout
-        
+
         if use_cfg:
             assert num_classes is not None
             cdim = tdim
             self.class_embedding = nn.Embedding(num_classes+1, cdim)
+            # When concatenating, embedding dimension doubles
+            emb_dim = tdim * 2
+        else:
+            emb_dim = tdim
 
         self.head = nn.Conv2d(3, ch, kernel_size=3, stride=1, padding=1)
         self.downblocks = nn.ModuleList()
@@ -34,7 +38,7 @@ class UNet(nn.Module):
             out_ch = ch * mult
             for _ in range(num_res_blocks):
                 self.downblocks.append(ResBlock(
-                    in_ch=now_ch, out_ch=out_ch, tdim=tdim,
+                    in_ch=now_ch, out_ch=out_ch, tdim=emb_dim,
                     dropout=dropout, attn=(i in attn)))
                 now_ch = out_ch
                 chs.append(now_ch)
@@ -43,8 +47,8 @@ class UNet(nn.Module):
                 chs.append(now_ch)
 
         self.middleblocks = nn.ModuleList([
-            ResBlock(now_ch, now_ch, tdim, dropout, attn=True),
-            ResBlock(now_ch, now_ch, tdim, dropout, attn=False),
+            ResBlock(now_ch, now_ch, emb_dim, dropout, attn=True),
+            ResBlock(now_ch, now_ch, emb_dim, dropout, attn=False),
         ])
 
         self.upblocks = nn.ModuleList()
@@ -52,7 +56,7 @@ class UNet(nn.Module):
             out_ch = ch * mult
             for _ in range(num_res_blocks + 1):
                 self.upblocks.append(ResBlock(
-                    in_ch=chs.pop() + now_ch, out_ch=out_ch, tdim=tdim,
+                    in_ch=chs.pop() + now_ch, out_ch=out_ch, tdim=emb_dim,
                     dropout=dropout, attn=(i in attn)))
                 now_ch = out_ch
             if i != 0:
@@ -92,9 +96,9 @@ class UNet(nn.Module):
             ######## TODO ########
             # DO NOT change the code outside this part.
             # Assignment 2. Implement class conditioning
-            # Add class embedding to time embedding
+            # Concatenate class embedding with time embedding
             cemb = self.class_embedding(class_label)
-            temb = temb + cemb
+            temb = torch.cat([temb, cemb], dim=1)
             #######################
 
         # Downsampling
