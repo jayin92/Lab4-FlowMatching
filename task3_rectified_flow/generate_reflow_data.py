@@ -42,7 +42,7 @@ def main(args):
 
     if args.use_cfg:
         assert fm.network.use_cfg, "The model was not trained with CFG support."
-        num_classes = fm.network.num_classes
+        num_classes = fm.network.class_embedding.num_embeddings - 1
         print(f"Using CFG with {num_classes} classes (including null class)")
 
     total_num_samples = args.num_samples
