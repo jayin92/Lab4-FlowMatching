@@ -81,24 +81,56 @@ class AttnBlock(nn.Module):
         return x + h
 
 
+class AdaGN(nn.Module):
+    """Adaptive Group Normalization for condition injection"""
+    def __init__(self, num_channels, num_groups=32, tdim=None):
+        super().__init__()
+        self.num_channels = num_channels
+        self.num_groups = num_groups
+        self.group_norm = nn.GroupNorm(num_groups, num_channels)
+
+        # Project condition embedding to scale and shift parameters
+        if tdim is not None:
+            self.adagn_proj = nn.Sequential(
+                Swish(),
+                nn.Linear(tdim, num_channels * 2),  # *2 for scale and shift
+            )
+        else:
+            self.adagn_proj = None
+
+    def forward(self, x, temb=None):
+        # Apply group normalization
+        h = self.group_norm(x)
+
+        # Apply adaptive modulation if condition is provided
+        if self.adagn_proj is not None and temb is not None:
+            # Project embedding to scale and shift
+            params = self.adagn_proj(temb)[:, :, None, None]
+            scale, shift = torch.chunk(params, 2, dim=1)
+            # Adaptive modulation: scale * normalized + shift
+            h = h * (1 + scale) + shift
+
+        return h
+
+
 class ResBlock(nn.Module):
     def __init__(self, in_ch, out_ch, tdim, dropout, attn=False):
         super().__init__()
-        self.block1 = nn.Sequential(
-            nn.GroupNorm(32, in_ch),
+        # First block with AdaGN for condition injection
+        self.adagn1 = AdaGN(in_ch, num_groups=32, tdim=tdim)
+        self.conv1 = nn.Sequential(
             Swish(),
             nn.Conv2d(in_ch, out_ch, 3, stride=1, padding=1),
         )
-        self.temb_proj = nn.Sequential(
-            Swish(),
-            nn.Linear(tdim, out_ch),
-        )
-        self.block2 = nn.Sequential(
-            nn.GroupNorm(32, out_ch),
+
+        # Second block with AdaGN for condition injection
+        self.adagn2 = AdaGN(out_ch, num_groups=32, tdim=tdim)
+        self.conv2 = nn.Sequential(
             Swish(),
             nn.Dropout(dropout),
             nn.Conv2d(out_ch, out_ch, 3, stride=1, padding=1),
         )
+
         if in_ch != out_ch:
             self.shortcut = nn.Conv2d(in_ch, out_ch, 1, stride=1, padding=0)
         else:
@@ -114,12 +146,20 @@ class ResBlock(nn.Module):
             if isinstance(module, (nn.Conv2d, nn.Linear)):
                 init.xavier_uniform_(module.weight)
                 init.zeros_(module.bias)
-        init.xavier_uniform_(self.block2[-1].weight, gain=1e-5)
+        # Find the last conv layer in conv2
+        for module in reversed(list(self.conv2.modules())):
+            if isinstance(module, nn.Conv2d):
+                init.xavier_uniform_(module.weight, gain=1e-5)
+                break
 
     def forward(self, x, temb):
-        h = self.block1(x)
-        h += self.temb_proj(temb)[:, :, None, None]
-        h = self.block2(h)
+        # First block with AdaGN
+        h = self.adagn1(x, temb)
+        h = self.conv1(h)
+
+        # Second block with AdaGN
+        h = self.adagn2(h, temb)
+        h = self.conv2(h)
 
         h = h + self.shortcut(x)
         h = self.attn(h)
