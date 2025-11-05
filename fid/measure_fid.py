@@ -8,7 +8,7 @@ from scipy import linalg
 from torchvision import transforms
 from itertools import chain
 from pathlib import Path
-from inception import InceptionV3
+from .inception import InceptionV3
 
 try:
     from tqdm import tqdm
